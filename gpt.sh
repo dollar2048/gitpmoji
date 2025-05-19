@@ -181,8 +181,9 @@ generate_message() {
   You will provide only one commit message for each diff.
   Your answer should contain only single commit message, nothing else.
   Use english language only.
-  Use multiple lines for the response.
-  Try to use maximum 100 words in the response.
+  Use ONLY 1 line for the response.
+  Try to use up to 60 characters in teh response.
+  If it's not enought then use maximum 100 characters in the response.
   "
 
   PREFIX_RX="\"" 
