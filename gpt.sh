@@ -212,8 +212,7 @@ generate_message() {
         "content": $prompt
       }
     ],
-    "max_tokens": 200,
-    "temperature": 0.999,
+    "max_completion_tokens": 200,
     "top_p": 1,
     "frequency_penalty": 0.0,
     "presence_penalty": 0.0
@@ -333,8 +332,7 @@ generate_emoji() {
         "content": $prompt
       }
     ],
-    "max_tokens": 100,
-    "temperature": 0.999,
+    "max_completion_tokens": 100,
     "top_p": 1,
     "frequency_penalty": 0.0,
     "presence_penalty": 0.0
@@ -417,8 +415,7 @@ assess_diff() {
         "content": $prompt
       }
     ],
-    "max_tokens": 500,
-    "temperature": 1,
+    "max_completion_tokens": 500,
     "top_p": 1,
     "frequency_penalty": 0.0,
     "presence_penalty": 0.0
