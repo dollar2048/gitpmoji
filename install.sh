@@ -228,11 +228,9 @@ echo "Git hooks successfully installed"
 echo "You can now commit with gitpmoji. 🚀"
 echo "To uninstall just remove $HOOKS_DIR/prepare-commit-msg and $GITPMOJI_INSTALL_DIR"
 echo ""
-# -d reads the diff from stdin, -g makes the commit message, -e adds the emoji.
-# The -m line works even when there are no changes yet (empty diff).
+# Setup check only: one API call that confirms key, base URL and model work.
+# It needs no diff, so it also works right after install on a clean tree.
 echo "Run this to test:"
-echo "  git diff | $GITPMOJI_DIR/gpt.sh -d -g -e"
-echo "or, without a diff:"
-echo "  $GITPMOJI_DIR/gpt.sh -e -m \"Fix login crash\""
+echo "  $GITPMOJI_DIR/gpt.sh -e"
 
 exit 0
