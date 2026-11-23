@@ -60,6 +60,7 @@ MESSAGE=""
 RESULT=""
 VERBOSE=false
 EMOJI=false
+DIFF_FROM_STDIN=false
 
 while getopts "hdf:garwm:ev" opt; do
   case $opt in
@@ -68,6 +69,7 @@ while getopts "hdf:garwm:ev" opt; do
       exit 0
       ;;
     d)
+      DIFF_FROM_STDIN=true
       DIFF_CONTENT=$(cat)
       ;;
     f)
@@ -119,6 +121,19 @@ if [ "$VERBOSE" = true ]; then
   echo -e "MESSAGE: $MESSAGE"
   echo -e "EMOJI: $EMOJI"
   echo -e "MULTILINE_COMMIT: $MULTILINE_COMMIT"
+fi
+
+# -d was given but nothing came from stdin (e.g. `git diff` with no changes):
+# say so instead of the generic "option required" error below.
+# The commit hook always passes -m, so it is not affected for -g.
+if [ "$DIFF_FROM_STDIN" = true ] && [ -z "$DIFF_CONTENT" ] && [ -z "$DIFF_FILE" ] \
+  && { { [ "$GENERATE" = true ] && [ -z "$MESSAGE" ]; } || [ "$ASSESS" = true ]; }; then
+  echo "Error: the diff from stdin (-d) is empty, there are no changes to describe."
+  echo "Change some files first (or use 'git diff --cached' for staged changes)."
+  if [ "$GENERATE" = true ]; then
+    echo "To add only an emoji to your own text, use: $0 -e -m \"Your message\""
+  fi
+  exit 1
 fi
 
 # Check if both emoji and message are provided
