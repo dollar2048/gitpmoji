@@ -1,138 +1,85 @@
 # GITPMOJI
-Enhanced Git commits using AI
------------------------------
 
-GITPMOJI is a powerful AI-driven tool designed to enhance your Git workflow. It offers several key features:
+AI for your git commits: emojis, commit messages from the diff, and code ratings.
 
-1. Commit Message Generation: Analyzes your code changes (diff) and generates comprehensive commit messages, providing detailed context for each commit.
+It is a `prepare-commit-msg` git hook, so it works with any git client or IDE.
 
-2. Code Change Evaluation: Assesses the impact and quality of your code changes, offering insights into the modifications made.
+## Install
 
-3. Emoji Decoration: Automatically adds relevant emojis to your commits, providing visual cues that make it easier to understand the nature of each change at a glance.
+In your project directory run:
 
-This multi-functional approach transforms your commit history into a more informative, insightful, and visually appealing log of your project's development. By leveraging AI to generate, evaluate, and decorate your commits, GITPMOJI helps maintain a clear and meaningful record of your project's evolution.
-
-## How It Works
-
-1. When you make a commit, GITPMOJI intercepts the commit message using a Git hook. So it works with all git clients and IDEs that use git hooks.
-2. The commit message and diff are sent to a custom script (`gpt.sh`) that communicates with the OpenAI API.
-3. The API, using the GPT-4o model, analyzes the commit message and the diff and updates the commit message.
-4. The suggested emoji is prepended to your original commit message.
-5. The AI generates a commit message based on the diff changes added to at the end of the original commit message.
-6. Rating of the commit message is added to the end of the commit message.
-7. The process respects any existing prefix in your commit messages, as defined by the GITPMOJI_PREFIX_RX environment variable.
-
-This process happens seamlessly, requiring no additional action from the user after initial setup.
-
-## How to use
-
-1. add ~ to the end of your commit message to let AI update the commit message and add the emoji to it
-2. add ~~ to the end of your commit message to let AI update the commit message based on the diff 
-3. add ~~~ to the end of your commit message to let AI for both update the commit message and add the emoji
-4. add * as the last character of your commit message to let AI add the rating to the end of the commit message
-5. use composition like ~~~* or ~~* or ~* to let AI update the commit accordingly
-
-## Assessing Code Changes
-
-GITPMOJI also provides a feature to assess the quality of your code changes. You can use the `./gpt -a` command to evaluate the impact and quality of your code modifications. This command analyzes the git diff and provides a detailed assessment based on several factors such as code cleanliness, structure, readability, complexity, and overall code quality.
-
-To use this feature, simply run:
-```
-git diff | ./gpt.sh -a -d
-```
-![Screenshot 2024-10-31 at 13 34 00](https://github.com/user-attachments/assets/7c190fd8-cfc3-4302-b44c-6cfd16a95329)
-
-
-## Setup as one liner wizard
-
-Navigate to your project directory and run:
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/dollar2048/gitpmoji/main/install.sh)
 ```
-and follow the instructions.
 
-### Installation Options
+The installer asks:
+- **Where to install.** Press Enter for `.gitpmoji/` (recommended, all files in it are git-ignored), or type `.` for the project root (`.gitpmoji.env` is then added to `.gitignore`).
+- **API key, base URL, model.** If you have global values (in `~/.gitpmoji.env` or exported in your shell), leave the answer empty to use them.
 
-The installer will prompt you to choose where to install gitpmoji:
-- **Default (`.gitpmoji`)**: Press Enter to install in a hidden `.gitpmoji` directory (recommended — a `.gitignore` with `*` is created inside that directory, so nothing in it gets tracked)
-- **Project root**: Enter `.` to install scripts directly in your project root (no directory-level ignore, since files land in the root)
-
-### Global Configuration Support
-
-The installer supports global configuration:
-- Create `~/.gitpmoji.env` to store your API key and settings globally
-- During installation, for each setting the installer asks "Use global X? (y/n, default is 'yes')" — just press Enter to use your global value
-- Local `.gitpmoji.env` will source global config and can override specific values
-
-## Setup manually
-
-- install jq
-```
-brew install jq
-```
-or
-```
-apt-get install jq
-```
-
-- download `prepare-commit-msg.sh` and `gpt.sh`
-
-- Create `.gitpmoji.env` file in your project root or globally at `~/.gitpmoji.env`:
+Then test it:
 
 ```bash
-# Your api key you can get one here https://platform.openai.com/account/api-keys
-export GITPMOJI_API_KEY="your_openai_api_key"
-export GITPMOJI_API_BASE_URL="https://api.openai.com/v1"
-export GITPMOJI_API_MODEL="gpt-4o"
-# Regex for sed command. emoji will be placed after it if found
-export GITPMOJI_PREFIX_RX="TICKET-[0-9]\{1,5\} \{0,1\}"
-# Generate a multi-line commit message (max 100 words) instead of a single short line (max ~100 chars)
-export GITPMOJI_MULTILINE_COMMIT="false"
-```
-
-> ❗ Note: 
-> - GITPMOJI_API_BASE_URL is optional and defaults to https://api.openai.com/v1
-> - GITPMOJI_API_MODEL is optional and defaults to gpt-4o
-> - GITPMOJI_MULTILINE_COMMIT is optional and defaults to false (single-line commit message)
-> - Local `.gitpmoji.env` can source global `~/.gitpmoji.env` and override specific values
-
-- make sure to have `prepare-commit-msg.sh` and `gpt.sh` executable
-
-- create symlink in `.git/hooks/`:
-```bash
-ln -sf ../../.gitpmoji/prepare-commit-msg.sh .git/hooks/prepare-commit-msg
-```
-or if installed in project root:
-```bash
-ln -sf ../../prepare-commit-msg.sh .git/hooks/prepare-commit-msg
+.gitpmoji/gpt.sh -e
 ```
 
 ## Usage
 
-Simply write your commit messages as usual. GITPMOJI will automatically add relevant emojis to your commits.
+Write your commit message as usual and add a marker at the end:
 
-## Examples
+| Marker | What happens |
+|--------|--------------|
+| `~`    | adds an emoji |
+| `~~`   | adds an AI commit message from the staged diff |
+| `~~~`  | adds an AI commit message and an emoji |
+| `*`    | adds a rating of the change (use alone or after a marker: `~*`, `~~*`, `~~~*`) |
 
-Check out the [commit messages](https://github.com/dollar2048/gitpmoji/commits/main/) in this repo
+Without a marker, the message stays as it is.
 
-![Screenshot 2024-08-22 at 11 43 32](https://github.com/user-attachments/assets/f69ff571-e304-41c1-baec-7d53219bd756)
+Example: `Fix login crash~` → `🪲 Fix login crash`
 
+![Commit examples](https://github.com/user-attachments/assets/f69ff571-e304-41c1-baec-7d53219bd756)
+
+See more in the [commit history](https://github.com/dollar2048/gitpmoji/commits/main/) of this repo.
+
+## Assess a diff
+
+```bash
+git diff | .gitpmoji/gpt.sh -d -a
 ```
-🩹️ typos fix. fix tilda removing~
-📝 Update README.md to provide a more comprehensive description of GITPMOJI features
-🩹 fix emoji placement
-⚰️ Remove redundant echo
-♻️ Update with commit message generation
-🔧 Add Prefix support and .env file
-➕ Add some predefined Emojis
-🛠️ Refacroring GPT script
+
+It rates cleanliness, structure, readability and complexity, from 1 to 10.
+
+![Assessment example](https://github.com/user-attachments/assets/7c190fd8-cfc3-4302-b44c-6cfd16a95329)
+
+Run `.gitpmoji/gpt.sh -h` for all options.
+
+## Configuration
+
+Settings live in `.gitpmoji.env` next to `gpt.sh`. The file made by the installer loads the global `~/.gitpmoji.env` first, so local values win. Commented-out lines (`#export ...`) mean the global value is used.
+
+```bash
+export GITPMOJI_API_KEY="your_openai_api_key"            # required, https://platform.openai.com/account/api-keys
+export GITPMOJI_API_BASE_URL="https://api.openai.com/v1" # optional, any OpenAI-compatible API
+export GITPMOJI_API_MODEL="gpt-4o"                       # optional, default gpt-4o
+export GITPMOJI_PREFIX_RX="TICKET-[0-9]\{1,5\} \{0,1\}"  # optional, sed regex: emoji goes after this prefix
+export GITPMOJI_MULTILINE_COMMIT="false"                 # optional, "true" for a multi-line AI message
 ```
 
-## Contributing
+Newer reasoning models (o-series, gpt-5 and later) are detected on their own. Rarely needed:
+- `GITPMOJI_API_PARAMS_STYLE` — `auto` (default), `legacy` or `new`, to force the request style
+- `GITPMOJI_REASONING_TOKENS` — extra token budget for reasoning models (default `2000`)
 
-(Add contribution guidelines here)
+## Manual setup
+
+1. Install `jq`: `brew install jq` or `apt-get install jq`
+2. Put `gpt.sh` and `prepare-commit-msg.sh` in `.gitpmoji/`, run `chmod +x` on them, and create `.gitpmoji/.gitpmoji.env` (see above).
+3. Link the hook:
+   ```bash
+   ln -sf ../../.gitpmoji/prepare-commit-msg.sh .git/hooks/prepare-commit-msg
+   ```
+
+To uninstall, remove `.git/hooks/prepare-commit-msg` and `.gitpmoji/`.
 
 ## License
 
 [LICENSE](LICENSE)
-
