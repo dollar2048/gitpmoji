@@ -88,27 +88,30 @@ EOF
     
     # Asks for one variable and appends it to .gitpmoji.env.
     # If a global value exists (exported in the shell or set in ~/.gitpmoji.env),
-    # pressing Enter keeps it: only a commented-out line is written, so the global value is used.
-    # $1 variable name, $2 question, $3 default when there is no global value (may be empty),
-    # $4 placeholder for the commented-out line
+    # leaving the answer empty uses it: only a commented-out line is written,
+    # so the global value stays in charge and can still change later.
+    # $1 variable name, $2 question, $3 default when there is no global value (may be empty)
     ask_env_var() {
         local name=$1
         local question=$2
         local fallback=$3
-        local placeholder=$4
         local global_value=${!name}
         local value
 
         if [ -n "$global_value" ]; then
             if [ "$name" = "GITPMOJI_API_KEY" ]; then
-                # never print the secret itself
-                echo "$question (press Enter to keep it, default is global)"
+                # never print or store the secret itself
+                echo "$question (leave empty for global default)"
             else
-                echo "$question (press Enter to keep it, default is global: '$global_value')"
+                echo "$question (leave empty for global default '$global_value')"
             fi
             read -p "$name=" value
             if [ -z "$value" ]; then
-                echo "#export $name=\"$placeholder\"" >> .gitpmoji.env
+                if [ "$name" = "GITPMOJI_API_KEY" ]; then
+                    echo "#export $name=\"_your_api_key_\"  # using global value" >> .gitpmoji.env
+                else
+                    echo "#export $name=\"$global_value\"  # using global value" >> .gitpmoji.env
+                fi
                 return
             fi
         elif [ -n "$fallback" ]; then
@@ -125,14 +128,11 @@ EOF
     }
 
     ask_env_var GITPMOJI_API_KEY \
-        "Enter your OpenAI API key (https://platform.openai.com/account/api-keys)" \
-        "" "_your_api_key_"
+        "Enter your OpenAI API key (https://platform.openai.com/account/api-keys)" ""
     ask_env_var GITPMOJI_API_BASE_URL \
-        "Enter base url for OpenAI API" \
-        "https://api.openai.com/v1" "https://api.openai.com/v1"
+        "Enter base url for OpenAI API" "https://api.openai.com/v1"
     ask_env_var GITPMOJI_API_MODEL \
-        "Enter model for OpenAI API" \
-        "gpt-4o" "gpt-4o"
+        "Enter model for OpenAI API" "gpt-4o"
     
     # Process GITPMOJI_PREFIX_RX
     if [ -n "$GITPMOJI_PREFIX_RX" ]; then
