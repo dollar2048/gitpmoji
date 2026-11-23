@@ -83,71 +83,53 @@ EOF
         echo "Found global config at ~/.gitpmoji.env"
     fi
     
-    # Process GITPMOJI_API_KEY
-    if [ -n "$GITPMOJI_API_KEY" ]; then
-        echo "Global GITPMOJI_API_KEY found"
-        echo "Use global GITPMOJI_API_KEY? (y/n, default is 'yes')"
-        read USE_GLOBAL_API_KEY
-        if [ "$USE_GLOBAL_API_KEY" != "n" ]; then
-            echo "#export GITPMOJI_API_KEY=\"_your_api_key_\"" >> .gitpmoji.env
-        else
-            echo "Enter your OpenAI API key (https://platform.openai.com/account/api-keys):"
-            read -p "GITPMOJI_API_KEY=" api_key
-            echo "export GITPMOJI_API_KEY=\"$api_key\"" >> .gitpmoji.env
-        fi
-    else
-        echo "Enter your OpenAI API key (https://platform.openai.com/account/api-keys):"
-        read -p "GITPMOJI_API_KEY=" api_key
-        echo "export GITPMOJI_API_KEY=\"$api_key\"" >> .gitpmoji.env
-    fi
-    
-    # Process GITPMOJI_API_BASE_URL
-    if [ -n "$GITPMOJI_API_BASE_URL" ]; then
-        echo "Global GITPMOJI_API_BASE_URL found: $GITPMOJI_API_BASE_URL"
-        echo "Use global GITPMOJI_API_BASE_URL? (y/n, default is 'yes')"
-        read USE_GLOBAL_BASE_URL
-        if [ "$USE_GLOBAL_BASE_URL" != "n" ]; then
-            echo "#export GITPMOJI_API_BASE_URL=\"https://api.openai.com/v1\"" >> .gitpmoji.env
-        else
-            echo "Enter base url for OpenAI API (leave empty for default 'https://api.openai.com/v1')"
-            read -p "GITPMOJI_API_BASE_URL=" base_url
-            if [ -z "$base_url" ]; then
-                base_url="https://api.openai.com/v1"
+    # Asks for one variable and appends it to .gitpmoji.env.
+    # If a global value exists (exported in the shell or set in ~/.gitpmoji.env),
+    # pressing Enter keeps it: only a commented-out line is written, so the global value is used.
+    # $1 variable name, $2 question, $3 default when there is no global value (may be empty),
+    # $4 placeholder for the commented-out line
+    ask_env_var() {
+        local name=$1
+        local question=$2
+        local fallback=$3
+        local placeholder=$4
+        local global_value=${!name}
+        local value
+
+        if [ -n "$global_value" ]; then
+            if [ "$name" = "GITPMOJI_API_KEY" ]; then
+                # never print the secret itself
+                echo "$question (press Enter to keep it, default is global)"
+            else
+                echo "$question (press Enter to keep it, default is global: '$global_value')"
             fi
-            echo "export GITPMOJI_API_BASE_URL=\"$base_url\"" >> .gitpmoji.env
-        fi
-    else
-        echo "Enter base url for OpenAI API (leave empty for default 'https://api.openai.com/v1')"
-        read -p "GITPMOJI_API_BASE_URL=" base_url
-        if [ -z "$base_url" ]; then
-            base_url="https://api.openai.com/v1"
-        fi
-        echo "export GITPMOJI_API_BASE_URL=\"$base_url\"" >> .gitpmoji.env
-    fi
-    
-    # Process GITPMOJI_API_MODEL
-    if [ -n "$GITPMOJI_API_MODEL" ]; then
-        echo "Global GITPMOJI_API_MODEL found: $GITPMOJI_API_MODEL"
-        echo "Use global GITPMOJI_API_MODEL? (y/n, default is 'yes')"
-        read USE_GLOBAL_MODEL
-        if [ "$USE_GLOBAL_MODEL" != "n" ]; then
-            echo "#export GITPMOJI_API_MODEL=\"gpt-4o\"" >> .gitpmoji.env
-        else
-            echo "Enter model for OpenAI API (leave empty for default 'gpt-4o')"
-            read -p "GITPMOJI_API_MODEL=" model
-            if [ -z "$model" ]; then
-                model="gpt-4o"
+            read -p "$name=" value
+            if [ -z "$value" ]; then
+                echo "#export $name=\"$placeholder\"" >> .gitpmoji.env
+                return
             fi
-            echo "export GITPMOJI_API_MODEL=\"$model\"" >> .gitpmoji.env
+        elif [ -n "$fallback" ]; then
+            echo "$question (leave empty for default '$fallback')"
+            read -p "$name=" value
+            if [ -z "$value" ]; then
+                value="$fallback"
+            fi
+        else
+            echo "$question"
+            read -p "$name=" value
         fi
-    else
-        echo "Enter model for OpenAI API (leave empty for default 'gpt-4o')"
-        read -p "GITPMOJI_API_MODEL=" model
-        if [ -z "$model" ]; then
-            model="gpt-4o"
-        fi
-        echo "export GITPMOJI_API_MODEL=\"$model\"" >> .gitpmoji.env
-    fi
+        echo "export $name=\"$value\"" >> .gitpmoji.env
+    }
+
+    ask_env_var GITPMOJI_API_KEY \
+        "Enter your OpenAI API key (https://platform.openai.com/account/api-keys)" \
+        "" "_your_api_key_"
+    ask_env_var GITPMOJI_API_BASE_URL \
+        "Enter base url for OpenAI API" \
+        "https://api.openai.com/v1" "https://api.openai.com/v1"
+    ask_env_var GITPMOJI_API_MODEL \
+        "Enter model for OpenAI API" \
+        "gpt-4o" "gpt-4o"
     
     # Process GITPMOJI_PREFIX_RX
     if [ -n "$GITPMOJI_PREFIX_RX" ]; then
@@ -203,14 +185,13 @@ EOF
     echo "--- end of .gitpmoji.env ---"
 fi
 
-if [ "$GITPMOJI_DIR" = "." ]; then
-    echo -e "\033[0;31m Do you want to add environment file '.gitpmoji.env' to .gitignore to keep your API key secret? (y/n)\033[0m"
-    read GITPMOJI_ADD_ENV_TO_GITIGNORE
-    if [ "$GITPMOJI_ADD_ENV_TO_GITIGNORE" = "y" ]; then
-        echo "" >> $TOP_LEVEL_GIT_DIR/.gitignore
-        echo "# ignore environment file for gitpmoji" >> $TOP_LEVEL_GIT_DIR/.gitignore
-        echo ".gitpmoji.env" >> $TOP_LEVEL_GIT_DIR/.gitignore
-    fi
+# A custom dir is already fully ignored by its own .gitignore ("*").
+# In the project root there is no such file, so always ignore .gitpmoji.env to keep the API key secret.
+if [ "$GITPMOJI_DIR" = "." ] && ! grep -qxF ".gitpmoji.env" "$TOP_LEVEL_GIT_DIR/.gitignore" 2>/dev/null; then
+    echo "" >> "$TOP_LEVEL_GIT_DIR/.gitignore"
+    echo "# ignore environment file for gitpmoji" >> "$TOP_LEVEL_GIT_DIR/.gitignore"
+    echo ".gitpmoji.env" >> "$TOP_LEVEL_GIT_DIR/.gitignore"
+    echo "Added .gitpmoji.env to .gitignore to keep your API key secret"
 fi
 
 cd $TOP_LEVEL_GIT_DIR
