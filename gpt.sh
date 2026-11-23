@@ -170,6 +170,88 @@ check_for_errors() {
   fi
 }
 
+# Request style for the chat/completions body:
+#   legacy - "max_tokens" + sampling params (gpt-4o and most OpenAI-compatible servers)
+#   new    - "max_completion_tokens" only (reasoning models: o-series, gpt-5 and later),
+#            they reject "max_tokens" and any non-default temperature/top_p/penalties
+#   auto   - try legacy first, switch to new on "unsupported_parameter"/"unsupported_value"
+API_PARAMS_STYLE=${GITPMOJI_API_PARAMS_STYLE:-auto}
+# Reasoning models spend hidden reasoning tokens from the same budget,
+# so the "new" style adds this headroom to keep the visible answer from being cut.
+REASONING_TOKENS=${GITPMOJI_REASONING_TOKENS:-2000}
+
+# $1 system prompt, $2 user prompt, $3 max answer tokens, $4 temperature, $5 style
+build_request() {
+  if [ "$5" = new ]; then
+    jq -n --arg system_prompt "$1" --arg prompt "$2" --arg api_model "$API_MODEL" \
+      --argjson max_tokens "$(( $3 + REASONING_TOKENS ))" '{
+      "model": $api_model,
+      "messages": [
+        { "role": "system", "content": $system_prompt },
+        { "role": "user", "content": $prompt }
+      ],
+      "max_completion_tokens": $max_tokens
+    }'
+  else
+    jq -n --arg system_prompt "$1" --arg prompt "$2" --arg api_model "$API_MODEL" \
+      --argjson max_tokens "$3" --argjson temperature "$4" '{
+      "model": $api_model,
+      "messages": [
+        { "role": "system", "content": $system_prompt },
+        { "role": "user", "content": $prompt }
+      ],
+      "max_tokens": $max_tokens,
+      "temperature": $temperature,
+      "top_p": 1,
+      "frequency_penalty": 0.0,
+      "presence_penalty": 0.0
+    }'
+  fi
+}
+
+post_chat() {
+  curl -s \
+       -X POST "$API_BASE_URL/chat/completions" \
+       -H "Content-Type: application/json" \
+       -H "Authorization: Bearer $API_KEY" \
+       -d "$1"
+}
+
+# Calls the API and stores the answer text in API_CONTENT.
+# Must not be called inside $(...): it updates API_PARAMS_STYLE for the next calls.
+# $1 system prompt, $2 user prompt, $3 max answer tokens, $4 temperature
+call_chat_api() {
+  local style=$API_PARAMS_STYLE
+  if [ "$style" = auto ]; then
+    style=legacy
+  fi
+
+  RESPONSE=$(post_chat "$(build_request "$1" "$2" "$3" "$4" "$style")")
+
+  if [ "$API_PARAMS_STYLE" = auto ]; then
+    local code
+    code=$(echo "$RESPONSE" | jq -r '.error.code // empty')
+    if [ "$code" = unsupported_parameter ] || [ "$code" = unsupported_value ]; then
+      if [ "$VERBOSE" = true ]; then
+        echo -e "Model rejected legacy params ($code), retrying with max_completion_tokens"
+      fi
+      API_PARAMS_STYLE=new
+      RESPONSE=$(post_chat "$(build_request "$1" "$2" "$3" "$4" new)")
+    else
+      API_PARAMS_STYLE=legacy
+    fi
+  fi
+
+  check_for_errors "$RESPONSE"
+
+  API_CONTENT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // empty' | sed 's/^"//;s/"$//')
+  if [ -z "$API_CONTENT" ]; then
+    echo -e "ERROR: empty answer (finish_reason: $(echo "$RESPONSE" | jq -r '.choices[0].finish_reason'))."
+    echo -e "If it is \"length\", raise GITPMOJI_REASONING_TOKENS (now $REASONING_TOKENS)."
+    exit 1
+  fi
+}
+
 generate_message() {
   if [ "$VERBOSE" = true ]; then
     echo -e "generate_message"
@@ -200,38 +282,9 @@ generate_message() {
 
   PREFIX_RX="\"" 
 
-  JSON='{
-    "model": $api_model,
-    "messages": [
-      {
-        "role": "system",
-        "content": $system_prompt
-      },
-      {
-        "role": "user",
-        "content": $prompt
-      }
-    ],
-    "max_completion_tokens": 200,
-    "top_p": 1,
-    "frequency_penalty": 0.0,
-    "presence_penalty": 0.0
-  }'
+  call_chat_api "$SYSTEM_PROMPT" "$DIFF_CONTENT" 200 0.999
+  GPT_MESSAGE=$API_CONTENT
 
-  DATA=$(jq -n --arg system_prompt "$SYSTEM_PROMPT" --arg prompt "$DIFF_CONTENT" --arg api_model "$API_MODEL" "$JSON")
-
-  # Make the API call
-  RESPONSE=$(curl -s \
-                  -X POST "$API_BASE_URL/chat/completions" \
-                  -H "Content-Type: application/json" \
-                  -H "Authorization: Bearer $API_KEY" \
-                  -d "$DATA")
-
-  check_for_errors "$RESPONSE"
-
-  # Extract and display the answer
-  GPT_MESSAGE=$(echo $RESPONSE | jq -r '.choices[0].message.content' | sed 's/^"//;s/"$//')
-  
   if [ -z "$MESSAGE" ]; then
     MESSAGE=$(echo -e "${GPT_MESSAGE}")
   else
@@ -320,37 +373,8 @@ generate_emoji() {
 
   PREFIX_RX="\"" 
 
-  JSON='{
-    "model": $api_model,
-    "messages": [
-      {
-        "role": "system",
-        "content": $system_prompt
-      },
-      {
-        "role": "user",
-        "content": $prompt
-      }
-    ],
-    "max_completion_tokens": 100,
-    "top_p": 1,
-    "frequency_penalty": 0.0,
-    "presence_penalty": 0.0
-  }'
-
-  DATA=$(jq -n --arg system_prompt "$SYSTEM_PROMPT" --arg prompt "$MESSAGE" --arg api_model "$API_MODEL" "$JSON")
-
-  # Make the API call
-  RESPONSE=$(curl -s \
-                  -X POST "$API_BASE_URL/chat/completions" \
-                  -H "Content-Type: application/json" \
-                  -H "Authorization: Bearer $API_KEY" \
-                  -d "$DATA")
-
-  check_for_errors "$RESPONSE"
-
-  # Extract and display the answer
-  EMOJI=$(echo $RESPONSE | jq -r '.choices[0].message.content' | sed 's/^"//;s/"$//')
+  call_chat_api "$SYSTEM_PROMPT" "$MESSAGE" 100 0.999
+  EMOJI=$API_CONTENT
 
   PREFIX="###"
 
@@ -403,38 +427,9 @@ assess_diff() {
     SYSTEM_PROMPT=$(echo -e "${SYSTEM_PROMPT}""${RATING_PROMPT}")
   fi
 
-  JSON='{
-    "model": $api_model,
-    "messages": [
-      {
-        "role": "system",
-        "content": $system_prompt
-      },
-      {
-        "role": "user",
-        "content": $prompt
-      }
-    ],
-    "max_completion_tokens": 500,
-    "top_p": 1,
-    "frequency_penalty": 0.0,
-    "presence_penalty": 0.0
-  }'
+  call_chat_api "$SYSTEM_PROMPT" "$DIFF_CONTENT" 500 1
+  GPT_MESSAGE=$API_CONTENT
 
-  DATA=$(jq -n --arg system_prompt "$SYSTEM_PROMPT" --arg prompt "$DIFF_CONTENT" --arg api_model "$API_MODEL" "$JSON")
-
-  # Make the API call
-  RESPONSE=$(curl -s \
-                  -X POST "$API_BASE_URL/chat/completions" \
-                  -H "Content-Type: application/json" \
-                  -H "Authorization: Bearer $API_KEY" \
-                  -d "$DATA")
-
-  check_for_errors "$RESPONSE"
-
-  # Extract and display the answer
-  GPT_MESSAGE=$(echo $RESPONSE | jq -r '.choices[0].message.content' | sed 's/^"//;s/"$//')
-  
   if [ -z "$RESULT" ]; then
     RESULT=$(echo -e "${GPT_MESSAGE}")
   else
