@@ -303,7 +303,10 @@ generate_message() {
   if [ -z "$MESSAGE" ]; then
     MESSAGE=$(echo -e "${GPT_MESSAGE}")
   else
-    MESSAGE=$(echo -e "${MESSAGE}""${GPT_MESSAGE}")
+    # Join with one space: "TICKET-123~~" -> "TICKET-123 Add token refresh",
+    # also when the user's text already ends with spaces.
+    MESSAGE=$(echo -e "${MESSAGE}" | sed 's/[[:space:]]*$//')
+    MESSAGE=$(echo -e "${MESSAGE} ${GPT_MESSAGE}")
   fi
   RESULT=$(echo -e "${MESSAGE}")
 }
@@ -444,6 +447,12 @@ assess_diff() {
 
   call_chat_api "$SYSTEM_PROMPT" "$DIFF_CONTENT" 500 1
   GPT_MESSAGE=$API_CONTENT
+
+  # Only -a (e.g. a commit message ending with "*"): no -g/-e step filled RESULT yet,
+  # so start from the user's message instead of losing it.
+  if [ -z "$RESULT" ] && [ -n "$MESSAGE" ]; then
+    RESULT=$(echo -e "${MESSAGE}")
+  fi
 
   if [ -z "$RESULT" ]; then
     RESULT=$(echo -e "${GPT_MESSAGE}")
